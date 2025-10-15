@@ -1,10 +1,11 @@
 import curses
 
-from states import State
-from windows.base import BaseManagedWindow
-from windows.border_boxes import BorderBox
-from windows.layout import LayoutMetric, LayoutValueComponent
-from windows.main_screen import MainScreen
+from .states import State
+from .windows.base import BaseManagedWindow
+from .windows.border_boxes import BorderBox
+from .windows.layout import LayoutMetric, LayoutValueComponent
+from .windows.main_screen import MainScreen
+from .windows.title_screen import TitleScreen
 
 
 class ManagedWindow(BaseManagedWindow):
@@ -94,6 +95,13 @@ class App:
             ),
         )
         self._windows = list(self._windows)
+        title_screen = TitleScreen(
+            parent=stdscr,
+            height=[LayoutValueComponent(100, LayoutMetric.PERCENTAGE)],
+            width=[LayoutValueComponent(100, LayoutMetric.PERCENTAGE)],
+        )
+        self._windows = [title_screen]
+        self._focused_window = title_screen
 
     def _loop_iteration(self, state: State):
         assert state != State.TERMINATE
@@ -114,7 +122,7 @@ class App:
                     case 27:  # Esc
                         return State.TERMINATE
                     case _:
-                        pass
+                        self._focused_window.handle_key(key)
             case State.RESIZE:
                 self.stdscr.clear()
                 self.stdscr.refresh()
@@ -137,12 +145,3 @@ class App:
                 state = self._loop_iteration(state)
             except KeyboardInterrupt:
                 state = State.TERMINATE
-
-
-def main(stdscr: curses.window):
-    app = App(stdscr)
-    app.run()
-
-
-curses.set_escdelay(25)
-curses.wrapper(main)

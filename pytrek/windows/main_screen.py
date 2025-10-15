@@ -1,3 +1,5 @@
+# TODO I want this to scroll up and the orders to show up after. It'd be cool
+
 import curses
 
 from enum import auto, Enum
@@ -6,7 +8,7 @@ from time import time
 from .base import BaseManagedWindow
 from .layout import LayoutValue
 
-_TITLE_ANIMATION_INTERVAL = 0.2
+_TITLE_ANIMATION_INTERVAL = 0.1
 
 _TITLE_CONTENT = [
     "                ,------*------,",

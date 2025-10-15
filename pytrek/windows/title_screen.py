@@ -9,7 +9,9 @@ import curses
 from enum import auto, Enum
 from time import time
 
-from .base import BaseManagedWindow
+from pytrek.states import State
+
+from .base import AbstractFocusableWindow
 from .layout import LayoutValue
 
 _TITLE_ANIMATION_INTERVAL = 0.1
@@ -28,42 +30,42 @@ _TITLE_CONTENT = [
 
 
 class Animation(Enum):
-    TITLE_ENTRY = auto()
-    TITLE_CENTRED = auto()
-    TITLE_EXIT = auto()
-    ORDERS_ENTRY = auto()
-    ORDERS_CENTRED = auto()
+    SHOW_TITLE = auto()
+    DISPLAY_TITLE = auto()
+    HIDE_TITLE = auto()
+    SHOW_ORDERS = auto()
+    DISPLAY_ORDERS = auto()
 
 
-class TitleScreen(BaseManagedWindow):
+class TitleScreen(AbstractFocusableWindow):
     def __init__(
             self,
-            parent: 'curses.window | BaseManagedWindow',
+            parent: 'curses.window | AbstractFocusableWindow',
             top: LayoutValue = [],
             left: LayoutValue = [],
             height: LayoutValue = [],
             width: LayoutValue = [],
     ):
         super().__init__(parent, top, left, height, width)
-        self._animation = Animation.TITLE_ENTRY
+        self._animation = Animation.SHOW_TITLE
         self._animation_stage = -1
         self._last_updated = 0.0
         self._orders: None | str = None
 
-    def _draw_title_entry(self):
+    def _draw_show_title(self):
         height, width = self.window.getmaxyx()
         empty_space = height - len(_TITLE_CONTENT)
         y_pos = height - 1 - self._animation_stage
         if y_pos < empty_space // 2:
             y_pos = empty_space // 2
-            self._animation = Animation.TITLE_CENTRED
+            self._animation = Animation.DISPLAY_TITLE
         for line in _TITLE_CONTENT[:self._animation_stage + 1]:
             if 0 <= y_pos < height:
                 padded_line = f'{line:{' '}^{width}}'
                 self.window.addnstr(y_pos, 0, padded_line, width - 1)
             y_pos += 1
 
-    def _draw_title_centred(self):
+    def _draw_display_title(self):
         height, width = self.window.getmaxyx()
         empty_space = height - len(_TITLE_CONTENT)
         y_pos = empty_space // 2
@@ -73,7 +75,7 @@ class TitleScreen(BaseManagedWindow):
                 self.window.addnstr(y_pos, 0, padded_line, width - 1)
             y_pos += 1
 
-    def _draw_title_exit(self):
+    def _draw_hide_title(self):
         height, width = self.window.getmaxyx()
         empty_space = height - len(_TITLE_CONTENT)
         y_pos = empty_space // 2 - self._animation_stage
@@ -83,36 +85,49 @@ class TitleScreen(BaseManagedWindow):
                 self.window.addnstr(y_pos, 0, padded_line, width - 1)
             y_pos += 1
         if y_pos <= 0:
-            self._animation = Animation.ORDERS_ENTRY
+            self._animation = Animation.SHOW_ORDERS
 
     def _draw_content(self):
         match self._animation:
-            case Animation.TITLE_ENTRY:
-                self._draw_title_entry()
-            case Animation.TITLE_CENTRED:
-                self._draw_title_centred()
-            case Animation.TITLE_EXIT:
-                self._draw_title_exit()
-            case Animation.ORDERS_ENTRY:
+            case Animation.SHOW_TITLE:
+                self._draw_show_title()
+            case Animation.DISPLAY_TITLE:
+                self._draw_display_title()
+            case Animation.HIDE_TITLE:
+                self._draw_hide_title()
+            case Animation.SHOW_ORDERS:
                 pass
-            case Animation.ORDERS_CENTRED:
+            case Animation.DISPLAY_ORDERS:
                 pass
 
     def draw(self):
         match self._animation:
-            case Animation.TITLE_ENTRY | Animation.TITLE_EXIT:
+            case Animation.SHOW_TITLE | Animation.HIDE_TITLE:
                 if time() - self._last_updated >= _TITLE_ANIMATION_INTERVAL:
                     self._animation_stage += 1
                     self._last_updated = time()
                     self._draw_required = True
                 pass
-            case Animation.TITLE_CENTRED:
+            case Animation.DISPLAY_TITLE:
                 pass
-            case Animation.ORDERS_ENTRY:
+            case Animation.SHOW_ORDERS:
                 pass
-            case Animation.ORDERS_CENTRED:
+            case Animation.DISPLAY_ORDERS:
                 pass
         super().draw()
 
     def set_orders(self, orders: None | str):
         self._orders = orders
+
+    def handle_key(self, key: int) -> State:
+        match (self._animation, key):
+            case (Animation.DISPLAY_TITLE, curses.KEY_ENTER | 10):
+                self._animation = Animation.HIDE_TITLE
+                self._animation_stage = 0
+                self._last_updated = 0.0
+                return State.CREATE_GALAXY
+            case (Animation.DISPLAY_ORDERS, curses.KEY_ENTER | 10):
+                pass
+            case _:
+                return State.STANDARD
+        return State.STANDARD

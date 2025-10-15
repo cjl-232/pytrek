@@ -2,6 +2,7 @@ import abc
 import curses
 
 from .layout import LayoutMetric, LayoutValue
+from ..states import State
 
 
 def _calc_position(
@@ -33,10 +34,12 @@ def _calc_size(
     return round(result)
 
 
-class BaseManagedWindow(abc.ABC):
+class AbstractWindow(abc.ABC):
+    focusable = False
+
     def __init__(
             self,
-            parent: 'curses.window | BaseManagedWindow',
+            parent: 'curses.window | AbstractWindow',
             top: LayoutValue = [],
             left: LayoutValue = [],
             height: LayoutValue = [],
@@ -77,3 +80,9 @@ class BaseManagedWindow(abc.ABC):
         self.window.refresh()
         self._draw_required = False
         self.debug_draw_count += 1
+
+
+class AbstractFocusableWindow(AbstractWindow):
+    @abc.abstractmethod
+    def handle_key(self, key: int) -> State:
+        """Handle key presses when this instance is focused."""

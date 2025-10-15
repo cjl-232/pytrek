@@ -1,14 +1,14 @@
 import curses
 
 from .states import State
-from .windows.base import BaseManagedWindow
+from .windows.base import AbstractFocusableWindow
 from .windows.border_boxes import BorderBox
 from .windows.layout import LayoutMetric, LayoutValueComponent
 from .windows.main_screen import MainScreen
 from .windows.title_screen import TitleScreen
 
 
-class ManagedWindow(BaseManagedWindow):
+class ManagedWindow(AbstractFocusableWindow):
     def _draw_content(self):
         self.window.addnstr('ALPHA', 5)
 
@@ -128,6 +128,8 @@ class App:
                 self.stdscr.refresh()
                 for window in self._windows:
                     window.place()
+            case _:
+                pass
         return State.STANDARD
 
     def run(self):

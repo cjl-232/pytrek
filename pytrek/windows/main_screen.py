@@ -5,7 +5,7 @@ import curses
 from enum import auto, Enum
 from time import time
 
-from .base import BaseManagedWindow
+from .base import AbstractWindow
 from .layout import LayoutValue
 
 _TITLE_ANIMATION_INTERVAL = 0.1
@@ -28,10 +28,10 @@ class Display(Enum):
     SHORT_RANGE_SENSORS = auto()
 
 
-class MainScreen(BaseManagedWindow):
+class MainScreen(AbstractWindow):
     def __init__(
             self,
-            parent: 'curses.window | BaseManagedWindow',
+            parent: 'curses.window | AbstractWindow',
             top: LayoutValue = [],
             left: LayoutValue = [],
             height: LayoutValue = [],

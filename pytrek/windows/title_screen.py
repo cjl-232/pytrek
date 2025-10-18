@@ -7,6 +7,7 @@
 import curses
 
 from enum import auto, Enum
+from textwrap import wrap
 from time import time
 
 from pytrek.states import State
@@ -50,7 +51,7 @@ class TitleScreen(AbstractFocusableWindow):
         self._animation = Animation.SHOW_TITLE
         self._animation_stage = -1
         self._last_updated = 0.0
-        self._orders: None | str = None
+        self._orders = ''
 
     def _draw_show_title(self):
         height, width = self.window.getmaxyx()
@@ -81,11 +82,40 @@ class TitleScreen(AbstractFocusableWindow):
         y_pos = empty_space // 2 - self._animation_stage
         for line in _TITLE_CONTENT:
             if 0 <= y_pos < height:
+                padded_line = f'{line:{' '}^{width}}{y_pos}'
+                self.window.addnstr(y_pos, 0, padded_line, width - 1)
+            y_pos += 1
+        if y_pos < 0:
+            self._animation = Animation.SHOW_ORDERS
+            self._animation_stage = -1
+            self._last_updated = 0.0
+
+    def _draw_show_orders(self):
+        height, width = self.window.getmaxyx()
+        lines = wrap(self._orders, min(60, width))
+        lines += ['', 'PRESS ENTER TO BEGIN YOUR MISSION...']
+        empty_space = height - len(lines)
+        y_pos = height - 1 - self._animation_stage
+        if y_pos < empty_space // 2:
+            y_pos = empty_space // 2
+            self._animation = Animation.DISPLAY_ORDERS
+        for line in lines[:self._animation_stage + 1]:
+            if 0 <= y_pos < height:
                 padded_line = f'{line:{' '}^{width}}'
                 self.window.addnstr(y_pos, 0, padded_line, width - 1)
             y_pos += 1
-        if y_pos <= 0:
-            self._animation = Animation.SHOW_ORDERS
+
+    def _draw_display_orders(self):
+        height, width = self.window.getmaxyx()
+        lines = wrap(self._orders, min(60, width))
+        lines += ['', 'PRESS ENTER TO BEGIN YOUR MISSION...']
+        empty_space = height - len(lines)
+        y_pos = empty_space // 2
+        for line in lines:
+            if 0 <= y_pos < height:
+                padded_line = f'{line:{' '}^{width}}'
+                self.window.addnstr(y_pos, 0, padded_line, width - 1)
+            y_pos += 1
 
     def _draw_content(self):
         match self._animation:
@@ -96,27 +126,27 @@ class TitleScreen(AbstractFocusableWindow):
             case Animation.HIDE_TITLE:
                 self._draw_hide_title()
             case Animation.SHOW_ORDERS:
-                pass
+                self._draw_show_orders()
             case Animation.DISPLAY_ORDERS:
-                pass
+                self._draw_display_orders()
 
     def draw(self):
         match self._animation:
-            case Animation.SHOW_TITLE | Animation.HIDE_TITLE:
+            case (
+                Animation.SHOW_TITLE |
+                Animation.HIDE_TITLE |
+                Animation.SHOW_ORDERS
+            ):
                 if time() - self._last_updated >= _TITLE_ANIMATION_INTERVAL:
                     self._animation_stage += 1
                     self._last_updated = time()
                     self._draw_required = True
                 pass
-            case Animation.DISPLAY_TITLE:
-                pass
-            case Animation.SHOW_ORDERS:
-                pass
-            case Animation.DISPLAY_ORDERS:
+            case _:
                 pass
         super().draw()
 
-    def set_orders(self, orders: None | str):
+    def set_orders(self, orders: str):
         self._orders = orders
 
     def handle_key(self, key: int) -> State:
@@ -127,7 +157,7 @@ class TitleScreen(AbstractFocusableWindow):
                 self._last_updated = 0.0
                 return State.CREATE_GALAXY
             case (Animation.DISPLAY_ORDERS, curses.KEY_ENTER | 10):
-                pass
+                return State.ENTER_GALAXY
             case _:
                 return State.STANDARD
         return State.STANDARD

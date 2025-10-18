@@ -1,10 +1,14 @@
 import curses
 
+from .color_pairs import ColorPair
+from .enterprise import Enterprise
+from .galaxies import Galaxy, LocalMap
+from .settings import settings
 from .states import State
 from .windows.base import AbstractFocusableWindow
 from .windows.border_boxes import BorderBox
 from .windows.layout import LayoutMetric, LayoutValueComponent
-from .windows.main_screen import MainScreen
+from .windows.sensors.short_range import ShortRangeDisplay
 from .windows.title_screen import TitleScreen
 
 
@@ -16,31 +20,46 @@ class ManagedWindow(AbstractFocusableWindow):
 class App:
     def __init__(self, stdscr: curses.window):
         self.stdscr = stdscr
-        main_screen_border_box = BorderBox(
+        self._galaxy: Galaxy | None = None
+        self._enterprise = Enterprise()
+        self._local_map: LocalMap | None = None
+        short_range_sensors_border_box = BorderBox(
             parent=stdscr,
-            height=[
-                LayoutValueComponent(100, LayoutMetric.PERCENTAGE),
-                LayoutValueComponent(-8, LayoutMetric.CHARACTERS),
-            ],
-            width=[
-                LayoutValueComponent(100, LayoutMetric.PERCENTAGE),
-                LayoutValueComponent(-34, LayoutMetric.CHARACTERS),
-            ],
-        )
-        secondary_screen_border_box = BorderBox(
-            parent=stdscr,
-            left=[
-                LayoutValueComponent(100, LayoutMetric.PERCENTAGE),
-                LayoutValueComponent(-34, LayoutMetric.CHARACTERS),
-            ],
             height=[
                 LayoutValueComponent(10, LayoutMetric.CHARACTERS),
             ],
             width=[
-                LayoutValueComponent(34, LayoutMetric.CHARACTERS),
+                LayoutValueComponent(33, LayoutMetric.CHARACTERS),
             ],
+            title='Short-Range Sensors',
+        )
+        long_range_sensors_border_box = BorderBox(
+            parent=stdscr,
+            left=[
+                LayoutValueComponent(33, LayoutMetric.CHARACTERS),
+            ],
+            height=[
+                LayoutValueComponent(5, LayoutMetric.CHARACTERS),
+            ],
+            width=[
+                LayoutValueComponent(33, LayoutMetric.CHARACTERS),
+            ],
+            title='Long-Range Sensors',
         )
         message_log_border_box = BorderBox(
+            parent=stdscr,
+            left=[
+                LayoutValueComponent(66, LayoutMetric.CHARACTERS),
+            ],
+            height=[
+                LayoutValueComponent(100, LayoutMetric.PERCENTAGE),
+            ],
+            width=[
+                LayoutValueComponent(100, LayoutMetric.PERCENTAGE),
+                LayoutValueComponent(-66, LayoutMetric.CHARACTERS),
+            ],
+        )
+        controls_border_box = BorderBox(
             parent=stdscr,
             top=[
                 LayoutValueComponent(100, LayoutMetric.PERCENTAGE),
@@ -50,58 +69,42 @@ class App:
                 LayoutValueComponent(8, LayoutMetric.CHARACTERS),
             ],
             width=[
-                LayoutValueComponent(100, LayoutMetric.PERCENTAGE),
-                LayoutValueComponent(-34, LayoutMetric.CHARACTERS),
+                LayoutValueComponent(66, LayoutMetric.CHARACTERS),
             ],
         )
-        options_menu_border_box = BorderBox(
-            parent=stdscr,
+        self._short_range_display = ShortRangeDisplay(
+            parent=short_range_sensors_border_box,
             top=[
-                LayoutValueComponent(10, LayoutMetric.CHARACTERS),
+                LayoutValueComponent(1, LayoutMetric.CHARACTERS),
             ],
             left=[
-                LayoutValueComponent(100, LayoutMetric.PERCENTAGE),
-                LayoutValueComponent(-34, LayoutMetric.CHARACTERS),
+                LayoutValueComponent(1, LayoutMetric.CHARACTERS),
             ],
             height=[
                 LayoutValueComponent(100, LayoutMetric.PERCENTAGE),
-                LayoutValueComponent(-10, LayoutMetric.CHARACTERS),
+                LayoutValueComponent(-2, LayoutMetric.CHARACTERS),
             ],
             width=[
-                LayoutValueComponent(34, LayoutMetric.CHARACTERS),
+                LayoutValueComponent(100, LayoutMetric.PERCENTAGE),
+                LayoutValueComponent(-2, LayoutMetric.CHARACTERS),
             ],
+            enterprise=self._enterprise,
         )
-        self._windows = (
-            main_screen_border_box,
-            secondary_screen_border_box,
+        self._game_windows = (
+            short_range_sensors_border_box,
+            long_range_sensors_border_box,
             message_log_border_box,
-            options_menu_border_box,
-            MainScreen(
-                parent=main_screen_border_box,
-                top=[
-                    LayoutValueComponent(1, LayoutMetric.CHARACTERS),
-                ],
-                left=[
-                    LayoutValueComponent(1, LayoutMetric.CHARACTERS),
-                ],
-                height=[
-                    LayoutValueComponent(100, LayoutMetric.PERCENTAGE),
-                    LayoutValueComponent(-2, LayoutMetric.CHARACTERS),
-                ],
-                width=[
-                    LayoutValueComponent(100, LayoutMetric.PERCENTAGE),
-                    LayoutValueComponent(-2, LayoutMetric.CHARACTERS),
-                ],
-            ),
+            controls_border_box,
+            self._short_range_display,
         )
-        self._windows = list(self._windows)
-        title_screen = TitleScreen(
+        self._windows = list(self._game_windows)
+        self.title_screen = TitleScreen(
             parent=stdscr,
             height=[LayoutValueComponent(100, LayoutMetric.PERCENTAGE)],
             width=[LayoutValueComponent(100, LayoutMetric.PERCENTAGE)],
         )
-        self._windows = [title_screen]
-        self._focused_window = title_screen
+        self._windows = [self.title_screen]
+        self._focused_window = self.title_screen
 
     def _loop_iteration(self, state: State):
         assert state != State.TERMINATE
@@ -122,12 +125,36 @@ class App:
                     case 27:  # Esc
                         return State.TERMINATE
                     case _:
-                        self._focused_window.handle_key(key)
+                        return self._focused_window.handle_key(key)
             case State.RESIZE:
                 self.stdscr.clear()
                 self.stdscr.refresh()
+                if self._local_map is not None:
+                    assert self._enterprise is not None
+                    self._local_map.draw(
+                        self._short_range_display.window,
+                        self._enterprise.sector_coordinates,
+                    )
                 for window in self._windows:
                     window.place()
+            case State.CREATE_GALAXY:
+                self._enterprise = Enterprise()
+                self._galaxy = Galaxy()
+                quadrant_map = self._galaxy.quadrants
+                initial_quadrant = self._enterprise.quadrant_coordinates
+                initial_sector = self._enterprise.sector_coordinates
+                self._local_map = LocalMap(
+                    quadrant=quadrant_map[initial_quadrant],
+                    player_sector_coordinates=initial_sector,
+                )
+                self.title_screen.set_orders(self._galaxy.orders)
+            case State.ENTER_GALAXY:
+                if self._local_map is not None:
+                    assert self._enterprise is not None
+                    self._windows = self._game_windows
+                    self._short_range_display.set_local_map(
+                        self._local_map,
+                    )
             case _:
                 pass
         return State.STANDARD
@@ -136,6 +163,25 @@ class App:
         """Launches the main loop, continuing until a termination occurs."""
         state = State.STANDARD
         curses.curs_set(0)
+        # Initialise colours:
+        if curses.can_change_color():
+            background_color = curses.COLOR_BLACK
+            klingon_color = curses.COLOR_GREEN
+            text_color = curses.COLOR_WHITE
+        else:
+            background_color = curses.COLOR_BLACK
+            klingon_color = curses.COLOR_GREEN
+            text_color = curses.COLOR_WHITE
+        curses.init_pair(
+            ColorPair.TEXT,
+            text_color,
+            background_color,
+        )
+        curses.init_pair(
+            ColorPair.KLINGON,
+            klingon_color,
+            background_color,
+        )
         self.stdscr.keypad(True)
         self.stdscr.nodelay(True)
         self.stdscr.clear()

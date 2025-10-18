@@ -160,7 +160,7 @@ class Quadrant:
             self.klingons = 0
         self.has_starbase = random() > 0.96
         self.stars = randint(1, 8)
-        self.entered = False
+        self.scanned = False
 
     def generate_local_map(self, enterprise_sector: tuple[int, int]):
         return QuadrantMap(

@@ -33,4 +33,3 @@ def _load_settings():
 
 
 settings = _load_settings()
-print(settings)
